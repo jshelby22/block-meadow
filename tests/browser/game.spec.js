@@ -99,6 +99,8 @@ test('desktop mouse clicks build and break blocks, and keyboard movement and fli
   await page.mouse.down({ button: 'right' });
   await page.mouse.up({ button: 'right' });
   await expect.poll(() => page.evaluate(() => window.meadow.snapshot().changes.length)).toBe(1);
+  // The 200ms save completes beyond the game's 130ms click guard.
+  await expect(page.locator('#save-text')).toHaveText('Saved on this device');
   await page.mouse.down({ button: 'left' });
   await page.mouse.up({ button: 'left' });
   await expect.poll(() => page.evaluate(() => window.meadow.snapshot().changes.length)).toBe(0);

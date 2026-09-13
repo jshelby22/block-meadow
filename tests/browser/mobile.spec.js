@@ -32,6 +32,8 @@ test('touch movement, drag-look, building, breaking, flight and home work in por
   await page.getByRole('button', { name: 'Wood, block 4' }).tap();
   await page.getByRole('button', { name: 'Place block' }).tap();
   await expect.poll(() => page.evaluate(() => window.meadow.snapshot().changes.length)).toBe(1);
+  // Wait for the real save, not incidental touch/rendering latency.
+  await expect(page.locator('#save-text')).toHaveText('Saved on this device');
   await page.getByRole('button', { name: 'Break block' }).tap();
   await expect.poll(() => page.evaluate(() => window.meadow.snapshot().changes.length)).toBe(0);
   await page.locator('#fly-button').tap();
