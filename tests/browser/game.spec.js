@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const simulationTimeout = process.env.CI ? 45_000 : 10_000;
+
 test('the meadow renders a real 3D world and invites a child to play', async ({ page }) => {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -20,7 +22,7 @@ test('a child can enter the meadow, choose wood, build, undo, and keep the world
   await page.keyboard.press('Digit4');
   await expect(page.getByRole('button', { name: 'Wood, block 4' })).toHaveAttribute('aria-pressed', 'true');
   await page.keyboard.down('ArrowDown');
-  await expect(page.locator('#target-label')).not.toBeEmpty({ timeout: 10_000 });
+  await expect(page.locator('#target-label')).not.toBeEmpty({ timeout: simulationTimeout });
   await page.keyboard.up('ArrowDown');
   await expect(page.locator('#target-label')).not.toBeEmpty();
   await page.keyboard.press('KeyE');
@@ -84,12 +86,12 @@ test('desktop mouse clicks build and break blocks, and keyboard movement and fli
   await expect.poll(() => page.evaluate(origin => {
     const position = window.meadow.snapshot().position;
     return Math.hypot(position.x - origin.x, position.z - origin.z);
-  }, start), { timeout: 10_000 }).toBeGreaterThan(0.5);
+  }, start), { timeout: simulationTimeout }).toBeGreaterThan(0.5);
   await page.keyboard.up('KeyW');
   const moved = await page.evaluate(() => window.meadow.snapshot().position);
   expect(Math.hypot(moved.x - start.x, moved.z - start.z)).toBeGreaterThan(0.5);
   await page.keyboard.down('ArrowDown');
-  await expect(page.locator('#target-label')).not.toBeEmpty({ timeout: 10_000 });
+  await expect(page.locator('#target-label')).not.toBeEmpty({ timeout: simulationTimeout });
   await page.keyboard.up('ArrowDown');
   await expect(page.locator('#target-label')).not.toBeEmpty();
   await page.mouse.click(720, 450, { button: 'right' });
@@ -98,7 +100,7 @@ test('desktop mouse clicks build and break blocks, and keyboard movement and fli
   await expect.poll(() => page.evaluate(() => window.meadow.snapshot().changes.length)).toBe(0);
   await page.keyboard.press('KeyF');
   await page.keyboard.down('Space');
-  await expect.poll(() => page.evaluate(() => window.meadow.snapshot().position.y), { timeout: 10_000 }).toBeGreaterThan(moved.y + 0.5);
+  await expect.poll(() => page.evaluate(() => window.meadow.snapshot().position.y), { timeout: simulationTimeout }).toBeGreaterThan(moved.y + 0.5);
   await page.keyboard.up('Space');
   expect(await page.evaluate(() => window.meadow.snapshot().position.y)).toBeGreaterThan(moved.y + 0.5);
   await page.keyboard.press('KeyH');
