@@ -94,9 +94,13 @@ test('desktop mouse clicks build and break blocks, and keyboard movement and fli
   await expect(page.locator('#target-label')).not.toBeEmpty({ timeout: simulationTimeout });
   await page.keyboard.up('ArrowDown');
   await expect(page.locator('#target-label')).not.toBeEmpty();
-  await page.mouse.click(720, 450, { button: 'right' });
+  // In pointer lock, click() also moves the mouse and can change the aim.
+  // Press/release at the current cursor so we edit the block we just targeted.
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.up({ button: 'right' });
   await expect.poll(() => page.evaluate(() => window.meadow.snapshot().changes.length)).toBe(1);
-  await page.mouse.click(720, 450, { button: 'left' });
+  await page.mouse.down({ button: 'left' });
+  await page.mouse.up({ button: 'left' });
   await expect.poll(() => page.evaluate(() => window.meadow.snapshot().changes.length)).toBe(0);
   await page.keyboard.press('KeyF');
   await page.keyboard.down('Space');
