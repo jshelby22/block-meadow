@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import { chromium } from '@playwright/test';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { BLUE_BUDDY } from '../src/blueprints.js';
+
+const url = process.argv[2] ?? 'http://127.0.0.1:4173/block-meadow/';
+const origin = new URL(url).origin;
+const label = process.argv[3] ?? 'production';
+assert.match(label, /^[a-z-]+$/);
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const errors = [];
+const externalRequests = [];
+page.on('pageerror', error => errors.push(error.message));
+page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+page.on('request', request => { if (new URL(request.url()).origin !== origin) externalRequests.push(request.url()); });
+page.on('requestfailed', request => errors.push(`${request.method()} ${request.url()} failed`));
+page.on('response', response => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
+try {
+  await page.goto(url);
+  await page.locator('#game-canvas[data-ready="true"]').waitFor();
+  assert.equal(await page.title(), 'Block Meadow — Your little world');
+  assert.equal(await page.evaluate(() => typeof window.meadow), 'undefined', 'development diagnostics must not ship');
+  await page.screenshot({ path: `qa/screenshots/${label}-welcome.png` });
+  await page.getByRole('button', { name: /Let.s play/ }).click();
+  await page.keyboard.down('ArrowDown');
+  await page.waitForFunction(() => Boolean(document.querySelector('#target-label').textContent));
+  await page.keyboard.up('ArrowDown');
+  await page.keyboard.press('Digit7');
+  await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('block-meadow.world.v1')).changes.length === 1);
+  const saved = await page.evaluate(() => localStorage.getItem('block-meadow.world.v1'));
+  assert.equal(JSON.parse(saved).changes[0][1], 'brick');
+  await page.reload();
+  await page.locator('#game-canvas[data-ready="true"]').waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem('block-meadow.world.v1')), saved);
+  await page.getByRole('button', { name: /Let.s play/ }).click();
+  await page.keyboard.press('KeyB');
+  await page.waitForFunction(count => JSON.parse(localStorage.getItem('block-meadow.world.v1')).changes.length === count, BLUE_BUDDY.blocks.length + 1);
+  await page.keyboard.press('KeyZ');
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('block-meadow.world.v1')).changes.length === 1);
+  assert.equal(await page.evaluate(() => localStorage.getItem('block-meadow.world.v1')), saved);
+  await page.keyboard.press('KeyB');
+  await page.waitForFunction(count => JSON.parse(localStorage.getItem('block-meadow.world.v1')).changes.length === count, BLUE_BUDDY.blocks.length + 1);
+  await page.locator('#toast.visible').waitFor({ state: 'hidden' });
+  await page.screenshot({ path: `qa/screenshots/${label}-blue-buddy.png` });
+  const withBuddy = await page.evaluate(() => localStorage.getItem('block-meadow.world.v1'));
+  await page.reload();
+  await page.locator('#game-canvas[data-ready="true"]').waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem('block-meadow.world.v1')), withBuddy);
+
+  const title = await page.title();
+  // Keep software-rendered WebGL checks sequential, not two active GPU scenes.
+  await page.close();
+  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  mobile.on('pageerror', error => errors.push(error.message));
+  mobile.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+  mobile.on('requestfailed', request => errors.push(`${request.url()} failed`));
+  await mobile.goto(url);
+  await mobile.getByRole('button', { name: /Let.s play/ }).tap();
+  await mobile.getByRole('button', { name: 'Quick build Blue Buddy' }).tap();
+  await mobile.waitForFunction(count => JSON.parse(localStorage.getItem('block-meadow.world.v1')).changes.length === count, BLUE_BUDDY.blocks.length);
+  assert.deepEqual(await mobile.evaluate(() => [innerWidth, document.documentElement.scrollWidth]), [390, 390]);
+  await mobile.locator('#toast.visible').waitFor({ state: 'hidden' });
+  await mobile.screenshot({ path: `qa/screenshots/${label}-mobile-buddy.png` });
+  await mobile.getByRole('button', { name: /Undo/ }).tap();
+  await mobile.waitForFunction(() => JSON.parse(localStorage.getItem('block-meadow.world.v1')).changes.length === 0);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(externalRequests, []);
+  const result = { passed: true, url, title, checks: ['production WebGL render', 'keyboard block selection', 'real block placement', 'Blue Buddy quick build', 'atomic statue undo preserves earlier edits', 'character save after reload', '390px touch build and undo', 'no development diagnostics', 'no console errors', 'no external runtime requests'], errors, externalRequests };
+  await mkdir('qa', { recursive: true });
+  await writeFile(`qa/${label}-result.json`, JSON.stringify(result, null, 2) + '\n');
+  console.log(JSON.stringify(result, null, 2));
+} finally {
+  await browser.close();
+}
